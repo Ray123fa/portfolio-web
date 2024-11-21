@@ -17,32 +17,55 @@ export default function Projects() {
   const { ref } = useSectionInView("Projects", 0.5);
   const [projectsData, setProjectsData] = useState<ProjectProps[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
-    async function fetchProjects() {
+    async function fetchProjects(page: number) {
+      setLoading(true);
       try {
-        const response = await fetch("https://showporto.rfaridh.my.id/api/v1/portos");
+        const response = await fetch(`https://showporto.rfaridh.my.id/api/v1/portos?page=${page}`);
         const result = await response.json();
 
         if (result.success && result.data?.data) {
           const transformedData = result.data.data.map((item: any) => ({
             title: item.title,
             description: item.description,
-            tags: item.tags.split(", "),
+            tags: item.tags.split(","),
             imageUrl: `/${item.image}`,
             webUrl: item.url,
           }));
 
           setProjectsData(transformedData);
-          setLoading(false);
+          setTotalPages(result.data.last_page);
         }
       } catch (error) {
         console.error("Failed to fetch projects:", error);
+      } finally {
+        setLoading(false);
       }
     }
 
-    fetchProjects();
-  }, []);
+    fetchProjects(currentPage);
+  }, [currentPage]);
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage((prev) => prev + 1);
+      setTimeout(() => {
+        window.location.replace("#projects"); // Refresh halaman
+      }, 500); // Delay untuk efek smooth scroll
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage((prev) => prev - 1);
+      setTimeout(() => {
+        window.location.replace("#projects"); // Refresh halaman
+      }, 500); // Delay untuk efek smooth scroll
+    }
+  };
 
   return (
     <section ref={ref} id="projects" className="scroll-mt-28 mb-28">
@@ -59,6 +82,28 @@ export default function Projects() {
           </React.Fragment>
         ))}
       </div>
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center mt-6">
+          <button
+            onClick={handlePrevPage}
+            disabled={currentPage === 1}
+            className={`mx-2 px-4 py-2 text-sm rounded transition ${
+              currentPage === 1 ? "dark:bg-[#4A4A4A] bg-[#E0E0E0] dark:text-[#9E9E9E] text-[#BDBDBD] cursor-not-allowed" : "dark:bg-[#6C63FF] bg-[#6C63FF] text-white dark:hover:bg-[#4B47D1] hover:bg-[#4B47D1]"
+            }`}
+          >
+            &lt;
+          </button>
+          <button
+            onClick={handleNextPage}
+            disabled={currentPage === totalPages}
+            className={`mx-2 px-4 py-2 text-sm rounded transition ${
+              currentPage === totalPages ? "dark:bg-[#4A4A4A] bg-[#E0E0E0] dark:text-[#9E9E9E] text-[#BDBDBD] cursor-not-allowed" : "dark:bg-[#6C63FF] bg-[#6C63FF] text-white dark:hover:bg-[#4B47D1] hover:bg-[#4B47D1]"
+            }`}
+          >
+            &gt;
+          </button>
+        </div>
+      )}
     </section>
   );
 }
