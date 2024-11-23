@@ -24,7 +24,22 @@ export default function Projects() {
     async function fetchProjects(page: number) {
       setLoading(true);
       try {
-        const response = await fetch(`https://showporto.rfaridh.my.id/api/v1/portos?page=${page}`);
+        const env = process.env.NEXT_PUBLIC_ENV;
+        let hostApi;
+        if (env === "local") {
+          hostApi = process.env.NEXT_PUBLIC_API_LOCAL;
+        } else if (env === "prod") {
+          hostApi = process.env.NEXT_PUBLIC_API_PROD;
+        }
+
+        const response = await fetch(`${hostApi}/api/v1/portos?page=${page}`, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_API_TOKEN}`,
+          },
+        });
         const result = await response.json();
 
         if (result.success && result.data?.data) {
@@ -75,13 +90,20 @@ export default function Projects() {
           <p className="text-lg">Loading...</p>
         </div>
       )}
-      <div>
-        {projectsData.map((project, index) => (
-          <React.Fragment key={index}>
-            <Project {...project} />
-          </React.Fragment>
-        ))}
-      </div>
+      {!loading && projectsData.length === 0 && (
+        <div className="flex justify-center items-center">
+          <p className="text-lg">No projects found.</p>
+        </div>
+      )}
+      {!loading && (
+        <div>
+          {projectsData.map((project, index) => (
+            <React.Fragment key={index}>
+              <Project {...project} />
+            </React.Fragment>
+          ))}
+        </div>
+      )}
       {totalPages > 1 && (
         <div className="flex justify-center items-center mt-6">
           <button
