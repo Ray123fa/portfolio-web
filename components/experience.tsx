@@ -84,7 +84,7 @@ export default function Experience() {
           <p className="text-lg">No experiences found.</p>
         </div>
       )}
-      {!loading && (
+      {!loading && experiencesData.length != 0 && (
         <VerticalTimeline lineColor="">
           {experiencesData.map((item, index) => (
             <React.Fragment key={index}>

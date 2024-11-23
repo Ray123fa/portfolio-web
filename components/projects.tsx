@@ -95,7 +95,7 @@ export default function Projects() {
           <p className="text-lg">No projects found.</p>
         </div>
       )}
-      {!loading && (
+      {!loading && projectsData.length != 0 && (
         <div>
           {projectsData.map((project, index) => (
             <React.Fragment key={index}>
