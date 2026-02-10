@@ -7,70 +7,43 @@ import "react-vertical-timeline-component/style.min.css";
 import { useSectionInView } from "@/lib/hooks";
 import { useTheme } from "@/context/theme-context";
 import { FaCircle } from "react-icons/fa";
-
-type ExperienceProps = {
-  title: string;
-  location: string;
-  description: string;
-  date: string;
-};
+import type { Experience as ExperienceType } from "@/lib/api/types";
 
 export default function Experience() {
   const { ref } = useSectionInView("Experience");
   const { theme } = useTheme();
   const [loading, setLoading] = useState(true);
-  const [experiencesData, setExperiencesData] = useState<ExperienceProps[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [experiencesData, setExperiencesData] = useState<ExperienceType[]>([]);
 
   useEffect(() => {
-    async function fetchExperiences() {
+    async function loadExperiences() {
       setLoading(true);
+      setError(null);
       try {
-        const env = process.env.NEXT_PUBLIC_ENV;
-        let hostApi;
-        if (env === "local") {
-          hostApi = process.env.NEXT_PUBLIC_API_LOCAL;
-        } else if (env === "prod") {
-          hostApi = process.env.NEXT_PUBLIC_API_PROD;
+        const response = await fetch("/api/experiences");
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.error || `Failed to fetch experiences: ${response.statusText}`
+          );
         }
 
-        const response = await fetch(`${hostApi}/api/v1/experiences`, {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.NEXT_PUBLIC_API_TOKEN}`,
-          },
-        });
-        const result = await response.json();
-
-        if (result.success) {
-          const transformedData = result.data.map((item: any) => {
-            const formatDate = (date: string | null) => {
-              if (!date) return "Present";
-              const options = { month: "short", year: "numeric" } as const;
-              return new Date(date).toLocaleDateString("id-ID", options);
-            };
-
-            return {
-              title: item.title,
-              location: item.location,
-              description: item.description,
-              date: `${formatDate(item.start_date)} - ${formatDate(item.end_date)}`,
-            };
-          });
-
-          setExperiencesData(transformedData);
-        }
-      } catch (error) {
-        console.error("Failed to fetch experiences:", error);
+        const data = await response.json();
+        setExperiencesData(Array.isArray(data) ? data : []);
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to fetch experiences";
+        setError(errorMessage);
+        console.error("Failed to fetch experiences:", err);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchExperiences();
+    loadExperiences();
   }, []);
-
   return (
     <section id="experience" ref={ref} className="scroll-mt-28 mb-28 sm:mb-40">
       <SectionHeading>My experience</SectionHeading>
@@ -79,12 +52,17 @@ export default function Experience() {
           <p className="text-lg">Loading...</p>
         </div>
       )}
-      {!loading && experiencesData.length === 0 && (
+      {error && (
+        <div className="flex justify-center items-center">
+          <p className="text-lg text-red-500">Error: {error}</p>
+        </div>
+      )}
+      {!loading && !error && experiencesData.length === 0 && (
         <div className="flex justify-center items-center">
           <p className="text-lg">No experiences found.</p>
         </div>
       )}
-      {!loading && experiencesData.length != 0 && (
+      {!loading && !error && experiencesData.length > 0 && (
         <VerticalTimeline lineColor="">
           {experiencesData.map((item, index) => (
             <React.Fragment key={index}>
