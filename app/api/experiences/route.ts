@@ -7,12 +7,16 @@ import { NextResponse } from "next/server";
 import { fetchExperiences } from "@/lib/api/portfolio";
 import { ApiError } from "@/lib/api/types";
 
-export const dynamic = "force-dynamic"; // Don't cache, always fetch fresh
+export const revalidate = 300;
+
+const CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
+};
 
 export async function GET() {
   try {
     const data = await fetchExperiences();
-    return NextResponse.json(data);
+    return NextResponse.json(data, { headers: CACHE_HEADERS });
   } catch (error) {
     console.error("Experiences API error:", error);
 
@@ -30,7 +34,7 @@ export async function GET() {
 
     return NextResponse.json(
       { error: message },
-      { status: statusCode }
+      { status: statusCode, headers: CACHE_HEADERS }
     );
   }
 }

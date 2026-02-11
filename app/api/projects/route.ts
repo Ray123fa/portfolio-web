@@ -7,7 +7,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchProjects } from "@/lib/api/portfolio";
 import { ApiError } from "@/lib/api/types";
 
-export const dynamic = "force-dynamic"; // Don't cache, always fetch fresh
+export const revalidate = 300;
+
+const CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     const data = await fetchProjects(page);
 
-    return NextResponse.json(data);
+    return NextResponse.json(data, { headers: CACHE_HEADERS });
   } catch (error) {
     console.error("Projects API error:", error);
 
@@ -42,7 +46,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       { error: message },
-      { status: statusCode }
+      { status: statusCode, headers: CACHE_HEADERS }
     );
   }
 }
