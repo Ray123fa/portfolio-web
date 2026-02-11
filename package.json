@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "check:lockfile-policy": "node ./check-lockfile-policy.mjs"
   },
   "dependencies": {
     "@react-email/components": "^1.0.7",

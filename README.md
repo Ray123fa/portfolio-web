@@ -28,3 +28,15 @@ I'm close to releasing a complete React & Next.js course. Get on the email list 
 
 1. Add RESEND_API_KEY environment variable in .env.local
 2. In the send-email.ts action file, change the "to" email to your own email
+
+## Package manager policy
+
+- This repository is standardized on npm.
+- Keep `package-lock.json` as the only lockfile.
+- Do not commit `pnpm-lock.yaml`, `yarn.lock`, or `bun.lockb`.
+- Run `npm run check:lockfile-policy` before committing dependency changes.
+
+## CI check
+
+- GitHub Actions runs `.github/workflows/lockfile-policy.yml` on push and pull request.
+- The workflow fails if `package-lock.json` is missing or if multiple lockfiles are present.
