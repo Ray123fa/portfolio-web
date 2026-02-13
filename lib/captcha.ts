@@ -1,16 +1,7 @@
 import crypto from "node:crypto";
 
-type CaptchaCategory = "math" | "text" | "logic" | "pattern";
-
-type CaptchaQuestion = {
-  id: number;
-  prompt: string;
-  answer: string;
-  category: CaptchaCategory;
-};
-
 type CaptchaTokenPayload = {
-  questionId: number;
+  answerHash: string;
   email: string;
   issuedAt: number;
   expiresAt: number;
@@ -55,68 +46,72 @@ const CAPTCHA_LOCK_MS = 5 * 60 * 1000;
 const CAPTCHA_MAX_ATTEMPTS = 3;
 const CAPTCHA_SUCCESS_COOLDOWN_MS = 5 * 60 * 1000;
 
-const CAPTCHA_QUESTIONS: CaptchaQuestion[] = [
-  { id: 1, prompt: "Calculate: (7 * 3) + 8", answer: "29", category: "math" },
-  { id: 2, prompt: "What is 25% of 80?", answer: "20", category: "math" },
-  { id: 3, prompt: "Solve: 50 - (12 + 7)", answer: "31", category: "math" },
-  { id: 4, prompt: "What is 6^2 + 4?", answer: "40", category: "math" },
-  { id: 5, prompt: "Calculate: (15 / 3) * 7", answer: "35", category: "math" },
-  { id: 6, prompt: "Remove vowels from 'portfolio'", answer: "prtfl", category: "text" },
-  {
-    id: 7,
-    prompt: "Type 'developer' backwards + '123'",
-    answer: "repoleved123",
-    category: "text",
+// ---------------------------------------------------------------------------
+// Dynamic question generators
+// Each returns { prompt, answer } with a randomly generated math problem
+// ---------------------------------------------------------------------------
+
+type QuestionGenerator = () => { prompt: string; answer: string };
+
+const generators: QuestionGenerator[] = [
+  // (a * b) + c
+  () => {
+    const a = crypto.randomInt(2, 13);
+    const b = crypto.randomInt(2, 13);
+    const c = crypto.randomInt(1, 20);
+    return { prompt: `Calculate: (${a} * ${b}) + ${c}`, answer: String(a * b + c) };
   },
-  {
-    id: 8,
-    prompt: "First 3 + last 3 of 'javascript'",
-    answer: "javipt",
-    category: "text",
+  // a + b - c  (ensure positive result)
+  () => {
+    const a = crypto.randomInt(20, 100);
+    const b = crypto.randomInt(1, 50);
+    const c = crypto.randomInt(1, Math.min(a + b - 1, 50));
+    return { prompt: `Solve: ${a} + ${b} - ${c}`, answer: String(a + b - c) };
   },
-  {
-    id: 9,
-    prompt: "Replace 'a' with '1' in 'rayfa'",
-    answer: "r1yf1",
-    category: "text",
+  // percentage: what is X% of Y
+  () => {
+    const pcts = [10, 20, 25, 50] as const;
+    const pct = pcts[crypto.randomInt(0, pcts.length)];
+    const base = crypto.randomInt(2, 21) * (100 / pct); // ensure integer result
+    return { prompt: `What is ${pct}% of ${base}?`, answer: String((pct / 100) * base) };
   },
-  {
-    id: 10,
-    prompt: "How many sides does a hexagon have?",
-    answer: "6",
-    category: "logic",
+  // a^2 + b
+  () => {
+    const a = crypto.randomInt(2, 10);
+    const b = crypto.randomInt(1, 20);
+    return { prompt: `What is ${a}^2 + ${b}?`, answer: String(a * a + b) };
   },
-  {
-    id: 11,
-    prompt: "If today is Monday, what day is 3 days later?",
-    answer: "Thursday",
-    category: "logic",
+  // (a / b) * c  (ensure clean division)
+  () => {
+    const b = crypto.randomInt(2, 10);
+    const quotient = crypto.randomInt(2, 10);
+    const a = b * quotient;
+    const c = crypto.randomInt(2, 10);
+    return { prompt: `Calculate: (${a} / ${b}) * ${c}`, answer: String(quotient * c) };
   },
-  {
-    id: 12,
-    prompt: "What is the 5th letter of the alphabet?",
-    answer: "e",
-    category: "logic",
+  // a * b
+  () => {
+    const a = crypto.randomInt(3, 15);
+    const b = crypto.randomInt(3, 15);
+    return { prompt: `What is ${a} x ${b}?`, answer: String(a * b) };
   },
-  {
-    id: 13,
-    prompt: "Spell 'hello' in reverse, CAPITALIZED",
-    answer: "OLLEH",
-    category: "logic",
-  },
-  {
-    id: 14,
-    prompt: "Continue: 1, 1, 2, 3, 5, 8, ?",
-    answer: "13",
-    category: "pattern",
-  },
-  {
-    id: 15,
-    prompt: "Missing: 2, 6, 12, 20, ?, 42",
-    answer: "30",
-    category: "pattern",
+  // a - b + c
+  () => {
+    const a = crypto.randomInt(50, 100);
+    const b = crypto.randomInt(1, 40);
+    const c = crypto.randomInt(1, 30);
+    return { prompt: `Calculate: ${a} - ${b} + ${c}`, answer: String(a - b + c) };
   },
 ];
+
+function generateQuestion(): { prompt: string; answer: string } {
+  const gen = generators[crypto.randomInt(0, generators.length)];
+  return gen();
+}
+
+// ---------------------------------------------------------------------------
+// In-memory state (rate limiting)
+// ---------------------------------------------------------------------------
 
 const globalForCaptcha = globalThis as unknown as {
   __captchaAttemptMap?: Map<string, AttemptState>;
@@ -131,12 +126,25 @@ const cooldownMap =
   globalForCaptcha.__captchaCooldownMap ??
   (globalForCaptcha.__captchaCooldownMap = new Map<string, number>());
 
-const getSecret = () =>
-  process.env.CAPTCHA_TOKEN_SECRET ||
-  process.env.RESEND_API_KEY ||
-  "dev-captcha-secret-change-this";
+// ---------------------------------------------------------------------------
+// Token helpers
+// ---------------------------------------------------------------------------
+
+const getSecret = () => {
+  const secret = process.env.CAPTCHA_TOKEN_SECRET;
+  if (!secret) {
+    throw new Error(
+      "Missing CAPTCHA_TOKEN_SECRET environment variable. " +
+        "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+    );
+  }
+  return secret;
+};
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
+const hashAnswer = (answer: string) =>
+  crypto.createHash("sha256").update(answer.trim().toLowerCase()).digest("hex");
 
 const createSignature = (value: string) => {
   return crypto.createHmac("sha256", getSecret()).update(value).digest("base64url");
@@ -169,7 +177,7 @@ const decodePayload = (token: string): CaptchaTokenPayload | null => {
     const json = Buffer.from(payloadPart, "base64url").toString("utf8");
     const parsed = JSON.parse(json) as CaptchaTokenPayload;
     if (
-      typeof parsed.questionId !== "number" ||
+      typeof parsed.answerHash !== "string" ||
       typeof parsed.email !== "string" ||
       typeof parsed.issuedAt !== "number" ||
       typeof parsed.expiresAt !== "number"
@@ -181,6 +189,10 @@ const decodePayload = (token: string): CaptchaTokenPayload | null => {
     return null;
   }
 };
+
+// ---------------------------------------------------------------------------
+// Attempt tracking
+// ---------------------------------------------------------------------------
 
 const getAttemptState = (email: string): AttemptState => {
   const key = normalizeEmail(email);
@@ -226,29 +238,24 @@ export const registerSuccessfulSend = (email: string) => {
   cooldownMap.set(normalizeEmail(email), Date.now() + CAPTCHA_SUCCESS_COOLDOWN_MS);
 };
 
-const pickQuestion = (excludeId?: number): CaptchaQuestion => {
-  const source =
-    typeof excludeId === "number"
-      ? CAPTCHA_QUESTIONS.filter((question) => question.id !== excludeId)
-      : CAPTCHA_QUESTIONS;
-  const index = crypto.randomInt(0, source.length);
-  return source[index];
-};
+// ---------------------------------------------------------------------------
+// Challenge creation
+// ---------------------------------------------------------------------------
 
-const getChallengeInternal = (email: string, excludeQuestionId?: number): CaptchaChallenge => {
+const getChallengeInternal = (email: string): CaptchaChallenge => {
   const state = getAttemptState(email);
-  const question = pickQuestion(excludeQuestionId);
+  const { prompt, answer } = generateQuestion();
 
   const now = Date.now();
   const payload: CaptchaTokenPayload = {
-    questionId: question.id,
+    answerHash: hashAnswer(answer),
     email: normalizeEmail(email),
     issuedAt: now,
     expiresAt: now + CAPTCHA_EXPIRY_MS,
   };
 
   return {
-    question: question.prompt,
+    question: prompt,
     token: encodePayload(payload),
     remainingAttempts: Math.max(0, CAPTCHA_MAX_ATTEMPTS - state.failedAttempts),
   };
@@ -281,6 +288,10 @@ const registerFailure = (email: string) => {
     isLocked: false,
   };
 };
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 export const getCaptchaChallenge = (email: string): CaptchaChallengeResult => {
   const cooldownUntil = getSendCooldown(email);
@@ -370,32 +381,13 @@ export const verifyCaptchaAnswer = (
     return {
       ok: false,
       error: "Challenge expired. A new one was generated.",
-      challenge: getChallengeInternal(email, parsed.questionId),
-      lockedUntil: null,
-    };
-  }
-
-  const question = CAPTCHA_QUESTIONS.find((item) => item.id === parsed.questionId);
-  if (!question) {
-    const failure = registerFailure(email);
-    if (failure.isLocked) {
-      return {
-        ok: false,
-        error: "Too many failed attempts. Please wait before trying again.",
-        challenge: null,
-        lockedUntil: failure.lockedUntil,
-      };
-    }
-
-    return {
-      ok: false,
-      error: "Verification failed. Please solve a new challenge.",
       challenge: getChallengeInternal(email),
       lockedUntil: null,
     };
   }
 
-  if (answer.trim() !== question.answer) {
+  // Compare answer hash (case-insensitive, trimmed)
+  if (hashAnswer(answer) !== parsed.answerHash) {
     const failure = registerFailure(email);
     if (failure.isLocked) {
       return {
@@ -409,7 +401,7 @@ export const verifyCaptchaAnswer = (
     return {
       ok: false,
       error: "Incorrect answer. A new challenge is ready.",
-      challenge: getChallengeInternal(email, question.id),
+      challenge: getChallengeInternal(email),
       lockedUntil: null,
     };
   }

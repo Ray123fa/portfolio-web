@@ -35,7 +35,7 @@ export default function Project({ title, description, tags, imageUrl, webUrl }: 
           <h3 className="text-2xl font-semibold">{title}</h3>
           <p className="mt-2 leading-relaxed text-gray-700 dark:text-white/70 text-sm md:text-base text-justify">{description}</p>
           {webUrl && (
-            <a href={webUrl} target="_blank" className="bg-blue-950/[0.8] text-white font-semibold px-4 py-2 my-3 w-fit rounded-lg text-sm">
+            <a href={webUrl} target="_blank" rel="noopener noreferrer" className="bg-blue-950/[0.8] text-white font-semibold px-4 py-2 my-3 w-fit rounded-lg text-sm">
               Link Project
             </a>
           )}

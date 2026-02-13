@@ -25,9 +25,18 @@ export function getApiConfig() {
     throw new Error("Missing API_TOKEN environment variable");
   }
 
+  const captchaSecret = process.env.CAPTCHA_TOKEN_SECRET || "";
+  if (!captchaSecret) {
+    throw new Error(
+      "Missing CAPTCHA_TOKEN_SECRET environment variable. " +
+        'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+    );
+  }
+
   return {
     apiBaseUrl: apiBaseUrl.replace(/\/$/, ""), // Remove trailing slash
     apiToken,
+    captchaSecret,
     environment: apiEnv as "local" | "prod",
   };
 }
